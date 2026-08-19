@@ -1,0 +1,13 @@
+{
+  "name": "blogger-auto-publisher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "publish": "node scripts/publish-to-blogger.mjs",
+    "validate": "node scripts/publish-to-blogger.mjs --validate"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

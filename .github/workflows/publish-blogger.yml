@@ -1,0 +1,73 @@
+name: Publish new posts to Blogger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "posts/*.json"
+  workflow_dispatch:
+    inputs:
+      post_path:
+        description: "발행할 JSON 경로 (예: posts/my-post.json)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blogger-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Select post files
+        id: posts
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_POST_PATH: ${{ inputs.post_path }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$MANUAL_POST_PATH" != posts/*.json || "$MANUAL_POST_PATH" == *".."* ]]; then
+              echo "post_path must match posts/*.json"
+              exit 1
+            fi
+            if [[ "$MANUAL_POST_PATH" == "posts/example.json" ]]; then
+              echo "The example file cannot be published."
+              exit 1
+            fi
+            [[ -f "$MANUAL_POST_PATH" ]] || { echo "File not found: $MANUAL_POST_PATH"; exit 1; }
+            printf 'files<<EOF\n%s\nEOF\n' "$MANUAL_POST_PATH" >> "$GITHUB_OUTPUT"
+          else
+            files="$(git diff --diff-filter=A --name-only "$BEFORE_SHA" "$CURRENT_SHA" -- 'posts/*.json' | grep -v '^posts/example\.json$' || true)"
+            printf 'files<<EOF\n%s\nEOF\n' "$files" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate and publish
+        if: steps.posts.outputs.files != ''
+        env:
+          BLOGGER_CLIENT_ID: ${{ secrets.BLOGGER_CLIENT_ID }}
+          BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
+          BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
+          BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
+          POST_FILES: ${{ steps.posts.outputs.files }}
+        run: |
+          mapfile -t files <<< "$POST_FILES"
+          node scripts/publish-to-blogger.mjs --validate "${files[@]}"
+          node scripts/publish-to-blogger.mjs "${files[@]}"
