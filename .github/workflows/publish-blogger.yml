@@ -48,10 +48,14 @@ jobs:
               echo "post_path must match posts/*.json"
               exit 1
             fi
+            if [[ "$MANUAL_POST_PATH" == "posts/example.json" ]]; then
+              echo "The example file cannot be published."
+              exit 1
+            fi
             [[ -f "$MANUAL_POST_PATH" ]] || { echo "File not found: $MANUAL_POST_PATH"; exit 1; }
             printf 'files<<EOF\n%s\nEOF\n' "$MANUAL_POST_PATH" >> "$GITHUB_OUTPUT"
           else
-            files="$(git diff --diff-filter=A --name-only "$BEFORE_SHA" "$CURRENT_SHA" -- 'posts/*.json')"
+            files="$(git diff --diff-filter=A --name-only "$BEFORE_SHA" "$CURRENT_SHA" -- 'posts/*.json' | grep -v '^posts/example\.json$' || true)"
             printf 'files<<EOF\n%s\nEOF\n' "$files" >> "$GITHUB_OUTPUT"
           fi
 
